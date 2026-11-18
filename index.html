@@ -1,0 +1,910 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Perjalanan ke Bulan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: adegan 3D memenuhi layar; panel kaca di atas (judul dan progres), teks narasi di bawah, tombol kontrol paling bawah. Satu tampilan gelap angkasa, semua teks putih, tombol bergaya Liquid Glass. */
+:root {
+  --fg: #ffffff;
+  --line: rgba(255, 255, 255, 0.2);
+  --font: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sky-top: #3b8fe8;
+  --sky-bot: #bfe3ff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: #02030a; color: var(--fg); font-family: var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
+[hidden] { display: none !important; }
+
+#sky { position: fixed; inset: 0; background: linear-gradient(180deg, var(--sky-top), var(--sky-bot)); }
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.6s var(--ease); }
+#fade.on { opacity: 1; }
+
+.glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.btn {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 20px; font: 600 14px/1 var(--font); color: var(--fg); white-space: nowrap; cursor: pointer;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(255, 255, 255, 0.26); border-radius: 999px;
+  backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transition: transform 0.35s var(--ease), border-color 0.35s, box-shadow 0.35s;
+}
+.btn::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.38) 48%, transparent 66%); transform: translateX(-120%); transition: transform 0.8s var(--ease); }
+.btn:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.5); }
+.btn:hover::before { transform: translateX(120%); }
+.btn:active { transform: scale(0.96); }
+.btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.primary { padding: 16px 30px; font-size: 16px; background: linear-gradient(135deg, rgba(120, 165, 255, 0.55), rgba(115, 90, 255, 0.28)); border-color: rgba(190, 210, 255, 0.55); box-shadow: 0 12px 38px rgba(80, 90, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.7); }
+body.ended #replayBtn { background: linear-gradient(135deg, rgba(120, 165, 255, 0.55), rgba(115, 90, 255, 0.28)); border-color: rgba(190, 210, 255, 0.6); }
+
+.top {
+  position: fixed; z-index: 5;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  max-width: 760px; margin-inline: auto;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 12px 18px 14px; border-radius: 22px;
+}
+.brand { font-weight: 800; font-size: 16px; letter-spacing: -0.01em; }
+.step-label { font-size: 13px; font-weight: 600; opacity: 0.9; }
+.progress { flex-basis: 100%; display: flex; gap: 4px; }
+.progress i { flex: 1; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); transition: background 0.4s; }
+.progress i.done { background: rgba(255, 255, 255, 0.9); }
+.progress i.now { background: rgba(160, 200, 255, 1); box-shadow: 0 0 10px rgba(130, 180, 255, 0.9); }
+
+.caption {
+  position: fixed; z-index: 5; left: 50%;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  width: min(760px, calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  padding: 18px 22px; border-radius: 24px;
+  opacity: 0; transform: translateX(-50%) translateY(16px);
+  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
+  pointer-events: none;
+}
+.caption.show { opacity: 1; transform: translateX(-50%); }
+.cap-kicker { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.85; }
+.cap-text { margin: 0; font-size: clamp(16px, 2.3vw, 20px); line-height: 1.6; font-weight: 500; text-wrap: pretty; }
+
+.controls {
+  position: fixed; z-index: 6; left: 0; right: 0;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
+  opacity: 0; pointer-events: none; transition: opacity 0.6s var(--ease);
+}
+body.started .controls { opacity: 1; pointer-events: auto; }
+
+.badge {
+  position: fixed; z-index: 5; top: 34%;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  min-width: 128px; padding: 12px 18px; border-radius: 18px;
+  opacity: 0; transform: translateX(24px); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+}
+.badge.cold { top: calc(34% + 92px); }
+.badge.show { opacity: 1; transform: none; }
+.badge small { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.85; }
+.badge b { display: block; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 10; display: grid; place-items: center;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
+  background: radial-gradient(ellipse at 50% 40%, rgba(5, 8, 26, 0.3), rgba(2, 3, 10, 0.8));
+  transition: opacity 0.7s var(--ease), visibility 0s 0.7s;
+}
+body.started .overlay { opacity: 0; visibility: hidden; pointer-events: none; }
+.card { width: min(520px, 100%); padding: 32px 28px; border-radius: 30px; text-align: center; animation: rise 0.9s var(--ease) both; }
+.card .kicker { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.85; }
+.card h1 { margin: 0; font-size: clamp(34px, 8vw, 52px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; text-wrap: balance; text-shadow: 0 0 50px rgba(111, 177, 255, 0.55); }
+.card p.lead { margin: 16px 0 26px; font-size: 17px; line-height: 1.65; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.voice-status {
+  position: fixed; z-index: 6;
+  top: calc(104px + env(safe-area-inset-top, 0px));
+  left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  max-width: 760px; margin-inline: auto; padding: 12px 18px; border-radius: 18px;
+  font-size: 14px; line-height: 1.5;
+}
+.card .note { margin: 18px 0 0; font-size: 13px; line-height: 1.5; opacity: 0.8; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: 0.01s !important; } }
+</style>
+
+<div id="sky"></div>
+<canvas id="scene" aria-label="Animasi 3D astronot naik roket dari Bumi ke Bulan" role="img"></canvas>
+<div id="fade"></div>
+
+<header class="top glass">
+  <span class="brand">Perjalanan ke Bulan</span>
+  <span class="step-label" id="stepLabel"></span>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+</header>
+
+<div class="badge hot glass" id="badgeHot"><small>Siang hari</small><b>+127 °C</b></div>
+<div class="badge cold glass" id="badgeCold"><small>Malam hari</small><b>−173 °C</b></div>
+
+<div class="voice-status glass" id="voiceStatus" role="status" hidden></div>
+
+<div class="caption glass" id="caption" aria-live="polite">
+  <p class="cap-kicker" id="capKicker"></p>
+  <p class="cap-text" id="capText"></p>
+</div>
+
+<div class="controls" id="controls">
+  <button class="btn" id="pauseBtn" type="button">Jeda</button>
+  <button class="btn" id="skipBtn" type="button">Lewati</button>
+  <button class="btn" id="replayBtn" type="button">Ulangi</button>
+  <button class="btn" id="voiceBtn" type="button" aria-pressed="true">Suara: Nyala</button>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="card glass">
+    <p class="kicker">Fakta unik Bulan</p>
+    <h1>Perjalanan ke Bulan</h1>
+    <p class="lead">Ikut astronot kecil naik roket dari Bumi, mendarat di Bulan, lalu dengarkan lima fakta yang belum banyak orang tahu.</p>
+    <div class="actions">
+      <button class="btn primary" id="startBtn" type="button">Mulai Perjalanan</button>
+      <button class="btn" id="testBtn" type="button">Tes suara</button>
+    </div>
+    <p class="note" id="startNote">Nyalakan suara perangkatmu agar narasinya terdengar.</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  var THREE = window.THREE;
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function smooth(a, b, x) { var t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+
+  /* ---------- Renderer, kamera, dunia ---------- */
+  var renderer;
+  try {
+    if (!THREE) throw new Error('three');
+    renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: true, alpha: true });
+  } catch (err) {
+    $('startNote').textContent = 'Browser atau perangkat ini tidak mendukung grafik 3D (WebGL), jadi animasinya tidak bisa ditampilkan.';
+    $('startBtn').disabled = true;
+    return;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 0);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(48, 1, 0.1, 30000);
+  var spaceWorld = new THREE.Group();
+  var moonWorld = new THREE.Group();
+  scene.add(spaceWorld);
+  scene.add(moonWorld);
+
+  function addLights(group, amb, sun, p) {
+    group.add(new THREE.AmbientLight(0xaab8ff, amb));
+    var d = new THREE.DirectionalLight(0xffffff, sun);
+    d.position.set(p[0], p[1], p[2]);
+    group.add(d);
+  }
+  addLights(spaceWorld, 0.65, 1.0, [60, 100, 80]);
+  addLights(moonWorld, 0.3, 1.5, [50, 35, 40]);
+
+  /* ---------- Tekstur dari kanvas ---------- */
+  function canvasTex(w, h, draw) {
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    draw(c.getContext('2d'), w, h);
+    var t = new THREE.CanvasTexture(c);
+    t.anisotropy = 4;
+    return t;
+  }
+
+  var earthTex = canvasTex(1024, 512, function (g, w, h) {
+    var gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, '#1c5fc0'); gr.addColorStop(1, '#2a82e6');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    var i, j, x, y;
+    for (i = 0; i < 26; i++) {
+      x = rnd(0, w); y = rnd(h * 0.2, h * 0.8);
+      g.fillStyle = Math.random() < 0.75 ? '#3aa65a' : '#c9b57a';
+      for (j = 0; j < 9; j++) { g.beginPath(); g.arc(x + rnd(-60, 60), y + rnd(-35, 35), rnd(18, 52), 0, 6.283); g.fill(); }
+    }
+    g.fillStyle = 'rgba(255,255,255,0.55)';
+    for (i = 0; i < 60; i++) { g.beginPath(); g.ellipse(rnd(0, w), rnd(0, h), rnd(30, 90), rnd(6, 14), rnd(-0.4, 0.4), 0, 6.283); g.fill(); }
+  });
+
+  var moonTex = canvasTex(1024, 512, function (g, w, h) {
+    g.fillStyle = '#a3a3a8'; g.fillRect(0, 0, w, h);
+    var i, x, y, r;
+    for (i = 0; i < 90; i++) { g.fillStyle = 'rgba(80,80,90,0.18)'; g.beginPath(); g.arc(rnd(0, w), rnd(0, h), rnd(30, 90), 0, 6.283); g.fill(); }
+    for (i = 0; i < 220; i++) {
+      x = rnd(0, w); y = rnd(0, h); r = rnd(4, 26);
+      g.fillStyle = 'rgba(60,60,70,0.35)'; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
+      g.strokeStyle = 'rgba(230,230,235,0.35)'; g.lineWidth = 1.5; g.beginPath(); g.arc(x - r * 0.12, y - r * 0.12, r, 0, 6.283); g.stroke();
+    }
+  });
+
+  /* ---------- Dunia Bumi dan antariksa ---------- */
+  var earth = new THREE.Mesh(new THREE.SphereGeometry(300, 96, 64), new THREE.MeshStandardMaterial({ map: earthTex, roughness: 0.9 }));
+  earth.position.y = -300; earth.rotation.x = Math.PI / 2;
+  var cap = new THREE.Mesh(new THREE.SphereGeometry(300.25, 64, 8, 0, Math.PI * 2, 0, 0.2), new THREE.MeshStandardMaterial({ color: 0x4fb35f, roughness: 1 }));
+  cap.position.y = -300;
+  var glow = new THREE.Mesh(new THREE.SphereGeometry(318, 64, 48), new THREE.MeshBasicMaterial({ color: 0x6db4ff, transparent: true, opacity: 0.2, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.position.y = -300;
+  var moonGlobe = new THREE.Mesh(new THREE.SphereGeometry(160, 64, 48), new THREE.MeshStandardMaterial({ map: moonTex, roughness: 1 }));
+  moonGlobe.position.set(40, 2600, -100);
+  spaceWorld.add(earth, cap, glow, moonGlobe);
+
+  var launchSite = new THREE.Group();
+  var pad = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.6, 0.4, 32), new THREE.MeshStandardMaterial({ color: 0x8d939c, roughness: 0.8 }));
+  pad.position.y = 0.2;
+  launchSite.add(pad);
+  var towerMat = new THREE.MeshStandardMaterial({ color: 0xd0533a, roughness: 0.7 });
+  [-0.6, 0.6].forEach(function (z) {
+    var c = new THREE.Mesh(new THREE.BoxGeometry(0.22, 9, 0.22), towerMat);
+    c.position.set(-3.6, 4.5, z); launchSite.add(c);
+  });
+  for (var k = 1; k <= 5; k++) {
+    var beam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1.4), towerMat);
+    beam.position.set(-3.6, k * 1.6, 0); launchSite.add(beam);
+  }
+  var arm = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.2, 0.4), towerMat);
+  arm.position.set(-2.2, 5.4, 0); launchSite.add(arm);
+  var treeMat = new THREE.MeshStandardMaterial({ color: 0x2f7d46, roughness: 1 });
+  for (var n = 0; n < 16; n++) {
+    var ang = rnd(0, 6.283), dist = rnd(14, 48);
+    var tree = new THREE.Mesh(new THREE.ConeGeometry(rnd(0.9, 1.6), rnd(3, 5), 8), treeMat);
+    tree.position.set(Math.cos(ang) * dist, 1.8 - (dist * dist) / 600, Math.sin(ang) * dist - 4);
+    if (Math.abs(tree.position.x) < 6 && tree.position.z > -6 && tree.position.z < 8) tree.position.x += 12;
+    launchSite.add(tree);
+  }
+  spaceWorld.add(launchSite);
+
+  var starGeo = new THREE.BufferGeometry();
+  var sp = new Float32Array(1800 * 3);
+  for (var s = 0; s < 1800; s++) {
+    var u = Math.random() * 2 - 1, a = Math.random() * 6.283, q = Math.sqrt(1 - u * u), R = 12000;
+    sp[s * 3] = R * q * Math.cos(a); sp[s * 3 + 1] = R * u; sp[s * 3 + 2] = R * q * Math.sin(a);
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+  var starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false });
+  var stars = new THREE.Points(starGeo, starMat);
+  stars.frustumCulled = false;
+  scene.add(stars);
+
+  /* ---------- Dunia Bulan ---------- */
+  var groundGeo = new THREE.PlaneGeometry(500, 500, 120, 120);
+  groundGeo.rotateX(-Math.PI / 2);
+  var craters = [], ci, cj;
+  for (ci = 0; ci < 34; ci++) {
+    var ca = rnd(0, 6.283), cd = rnd(32, 220);
+    craters.push({ x: Math.cos(ca) * cd, z: Math.sin(ca) * cd, r: rnd(5, 16) });
+  }
+  var gp = groundGeo.attributes.position;
+  for (ci = 0; ci < gp.count; ci++) {
+    var gx = gp.getX(ci), gz = gp.getZ(ci), gd = Math.sqrt(gx * gx + gz * gz);
+    var hgt = (Math.sin(gx * 0.11) * Math.cos(gz * 0.09) * 1.6 + Math.sin(gx * 0.31 + gz * 0.23) * 0.5) * smooth(14, 40, gd);
+    for (cj = 0; cj < craters.length; cj++) {
+      var cr = craters[cj], qd = Math.sqrt((gx - cr.x) * (gx - cr.x) + (gz - cr.z) * (gz - cr.z)) / cr.r;
+      if (qd < 1) hgt -= (1 - qd * qd) * cr.r * 0.22;
+      if (qd > 0.85 && qd < 1.35) hgt += Math.exp(-Math.pow((qd - 1.05) * 6, 2)) * cr.r * 0.06;
+    }
+    gp.setY(ci, hgt);
+  }
+  groundGeo.computeVertexNormals();
+  moonWorld.add(new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color: 0x9b9ba2, roughness: 1, flatShading: true })));
+
+  var rockMat = new THREE.MeshStandardMaterial({ color: 0x85858c, roughness: 1, flatShading: true });
+  for (ci = 0; ci < 14; ci++) {
+    var rk = new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(0.3, 0.9), 0), rockMat);
+    var ra = rnd(0, 6.283), rd = rnd(9, 18);
+    rk.position.set(Math.cos(ra) * rd, 0.1, Math.sin(ra) * rd - 3);
+    rk.rotation.set(rnd(0, 3), rnd(0, 3), rnd(0, 3));
+    moonWorld.add(rk);
+  }
+
+  var skyEarth = new THREE.Mesh(new THREE.SphereGeometry(18, 48, 32), new THREE.MeshStandardMaterial({ map: earthTex, roughness: 0.9, emissive: 0x0a1a3a }));
+  skyEarth.position.set(-34, 30, -80);
+  skyEarth.rotation.set(0.3, 0.5, 0.2);
+  moonWorld.add(skyEarth);
+
+  /* ---------- Langit ---------- */
+  var skyEl = $('sky'), lastK = -1;
+  var dayTop = new THREE.Color(0x3b8fe8), dayBot = new THREE.Color(0xbfe3ff);
+  var spTop = new THREE.Color(0x01020a), spBot = new THREE.Color(0x070b24);
+  var tA = new THREE.Color(), tB = new THREE.Color();
+  function setSky(kk) {
+    kk = clamp(kk, 0, 1);
+    if (Math.abs(kk - lastK) < 0.002) return;
+    lastK = kk;
+    tA.copy(dayTop).lerp(spTop, kk);
+    tB.copy(dayBot).lerp(spBot, kk);
+    skyEl.style.setProperty('--sky-top', '#' + tA.getHexString());
+    skyEl.style.setProperty('--sky-bot', '#' + tB.getHexString());
+    starMat.opacity = smooth(0.3, 0.9, kk);
+  }
+
+  /* ---------- Roket ---------- */
+  function mat(c, o) {
+    o = o || {};
+    return new THREE.MeshStandardMaterial({ color: c, roughness: o.r == null ? 0.5 : o.r, metalness: o.m || 0, transparent: !!o.t, opacity: o.o == null ? 1 : o.o });
+  }
+  function mesh(geo, m, x, y, z) {
+    var o = new THREE.Mesh(geo, m);
+    o.position.set(x || 0, y || 0, z || 0);
+    return o;
+  }
+
+  var rocket = new THREE.Group();
+  rocket.add(mesh(new THREE.CylinderGeometry(0.9, 0.9, 5, 32), mat(0xf3f5fa, { r: 0.35 }), 0, 3, 0));
+  rocket.add(mesh(new THREE.ConeGeometry(0.9, 1.9, 32), mat(0xff5a3c, { r: 0.4 }), 0, 6.45, 0));
+  rocket.add(mesh(new THREE.CylinderGeometry(0.93, 0.93, 0.55, 32), mat(0xff5a3c, { r: 0.4 }), 0, 1.9, 0));
+  rocket.add(mesh(new THREE.CylinderGeometry(0.55, 0.75, 0.55, 24), mat(0x3a3f4b, { r: 0.6, m: 0.4 }), 0, 0.28, 0));
+  var win = mesh(new THREE.SphereGeometry(0.42, 24, 16), mat(0x8fd0ff, { r: 0.1, m: 0.6 }), 0, 4.3, 0.74);
+  win.scale.z = 0.55;
+  rocket.add(win);
+  rocket.add(mesh(new THREE.TorusGeometry(0.44, 0.07, 12, 32), mat(0xc9ced8, { r: 0.3, m: 0.6 }), 0, 4.3, 0.8));
+  for (var fi = 0; fi < 3; fi++) {
+    var finPivot = new THREE.Group();
+    finPivot.add(mesh(new THREE.BoxGeometry(0.16, 1.7, 1.1), mat(0xff5a3c, { r: 0.4 }), 0, 0, 0.95));
+    finPivot.position.y = 1.15;
+    finPivot.rotation.y = fi * Math.PI * 2 / 3;
+    rocket.add(finPivot);
+  }
+  var flame = new THREE.Group();
+  var flameOuter = mesh(new THREE.ConeGeometry(0.55, 3, 20), new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.85, depthWrite: false }), 0, -1.5, 0);
+  var flameInner = mesh(new THREE.ConeGeometry(0.3, 2, 16), new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: 0.95, depthWrite: false }), 0, -1.0, 0);
+  flameOuter.rotation.x = Math.PI;
+  flameInner.rotation.x = Math.PI;
+  flame.add(flameOuter, flameInner);
+  rocket.add(flame);
+  var rocketFlame = 0;
+
+  /* ---------- Astronot ---------- */
+  var astro = new THREE.Group();
+  var body = new THREE.Group();
+  astro.add(body);
+  var A = { mode: 'idle', walk: 0, hop: 0, talking: false };
+  var white = mat(0xf4f6fb, { r: 0.45 }), grey = mat(0xb9c0cc, { r: 0.5 });
+
+  body.add(mesh(new THREE.CylinderGeometry(0.42, 0.38, 0.85, 20), white, 0, 1.15, 0));
+  body.add(mesh(new THREE.BoxGeometry(0.34, 0.28, 0.06), mat(0xff7a45, { r: 0.5 }), 0, 1.2, 0.4));
+  body.add(mesh(new THREE.BoxGeometry(0.62, 0.85, 0.3), grey, 0, 1.2, -0.42));
+  var neck = mesh(new THREE.TorusGeometry(0.34, 0.09, 12, 24), grey, 0, 1.62, 0);
+  neck.rotation.x = Math.PI / 2;
+  body.add(neck);
+
+  var head = new THREE.Group();
+  head.position.y = 1.95;
+  body.add(head);
+  head.add(mesh(new THREE.SphereGeometry(0.33, 24, 18), mat(0xf2c29b, { r: 0.8 }), 0, 0, 0.02));
+  var eyeGeo = new THREE.SphereGeometry(0.045, 12, 10), eyeMat = new THREE.MeshBasicMaterial({ color: 0x1b1b22 });
+  A.eyeL = mesh(eyeGeo, eyeMat, -0.115, 0.06, 0.3);
+  A.eyeR = mesh(eyeGeo, eyeMat, 0.115, 0.06, 0.3);
+  A.mouth = mesh(new THREE.SphereGeometry(0.07, 14, 10), new THREE.MeshBasicMaterial({ color: 0x4a1c1c }), 0, -0.12, 0.3);
+  A.mouth.scale.set(1.2, 0.25, 0.5);
+  head.add(A.eyeL, A.eyeR, A.mouth);
+  head.add(mesh(new THREE.SphereGeometry(0.5, 32, 24), mat(0xcfe8ff, { r: 0.05, m: 0.2, t: true, o: 0.25 }), 0, 0, 0));
+
+  function makeArm(x) {
+    var p = new THREE.Group();
+    p.position.set(x, 1.45, 0);
+    p.add(mesh(new THREE.CylinderGeometry(0.14, 0.13, 0.7, 12), white, 0, -0.35, 0));
+    p.add(mesh(new THREE.SphereGeometry(0.16, 14, 12), grey, 0, -0.78, 0));
+    body.add(p);
+    return p;
+  }
+  function makeLeg(x) {
+    var p = new THREE.Group();
+    p.position.set(x, 0.78, 0);
+    p.add(mesh(new THREE.CylinderGeometry(0.18, 0.17, 0.62, 12), white, 0, -0.31, 0));
+    p.add(mesh(new THREE.BoxGeometry(0.3, 0.2, 0.46), grey, 0, -0.68, 0.07));
+    body.add(p);
+    return p;
+  }
+  A.armL = makeArm(-0.58); A.armR = makeArm(0.58);
+  A.legL = makeLeg(-0.2); A.legR = makeLeg(0.2);
+
+  var shadow = mesh(new THREE.CircleGeometry(0.7, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }), 0, 0.03, 0);
+  shadow.rotation.x = -Math.PI / 2;
+  astro.add(shadow);
+
+  var gait = 0;
+  function animAstro(time, dt) {
+    var w = A.walk, ease = Math.min(1, dt * 10);
+    gait += dt * w * 8;
+    var sw = Math.sin(gait) * 0.7 * w;
+    A.legL.rotation.x = sw;
+    A.legR.rotation.x = -sw;
+    var aR = 0.14, aL = -0.14, xR = -sw * 0.8, xL = sw * 0.8;
+    if (A.mode === 'wave') { aR = 2.35 + Math.sin(time * 9) * 0.35; xR = 0; }
+    else if (A.mode === 'point') { aL = -2.2; xL = 0; }
+    A.armR.rotation.z += (aR - A.armR.rotation.z) * ease;
+    A.armL.rotation.z += (aL - A.armL.rotation.z) * ease;
+    A.armR.rotation.x += (xR - A.armR.rotation.x) * ease;
+    A.armL.rotation.x += (xL - A.armL.rotation.x) * ease;
+    body.position.y = A.hop + Math.sin(time * 2) * 0.02 + Math.abs(Math.sin(gait)) * 0.06 * w;
+    head.rotation.y = Math.sin(time * 0.8) * 0.12;
+    var talk = A.talking ? 0.25 + Math.abs(Math.sin(time * 13) + Math.sin(time * 7.3) * 0.6) * 0.55 : 0.2;
+    A.mouth.scale.y += (talk - A.mouth.scale.y) * Math.min(1, dt * 20);
+    var blink = (time % 3.2) < 0.12 ? 0.1 : 1;
+    A.eyeL.scale.y = blink; A.eyeR.scale.y = blink;
+    shadow.scale.setScalar(1 - Math.min(0.5, A.hop * 0.12));
+  }
+
+  /* ---------- Asap peluncuran ---------- */
+  var puffs = [], puffGeo = new THREE.SphereGeometry(1, 10, 8), puffIdx = 0, puffAcc = 0;
+  for (var pi = 0; pi < 36; pi++) {
+    var pm = new THREE.Mesh(puffGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+    pm.visible = false;
+    pm.userData = { life: 0, vx: 0, vz: 0 };
+    spaceWorld.add(pm);
+    puffs.push(pm);
+  }
+  function emitPuff(x, y, z) {
+    var p = puffs[puffIdx++ % puffs.length];
+    p.position.set(x + rnd(-0.6, 0.6), y, z + rnd(-0.6, 0.6));
+    p.userData.life = 1; p.userData.vx = rnd(-3, 3); p.userData.vz = rnd(-3, 3);
+    p.visible = true;
+  }
+  function updatePuffs(dt) {
+    for (var i = 0; i < puffs.length; i++) {
+      var p = puffs[i];
+      if (p.userData.life <= 0) continue;
+      p.userData.life -= dt * 0.5;
+      if (p.userData.life <= 0) { p.visible = false; continue; }
+      var l = p.userData.life;
+      p.scale.setScalar(0.8 + (1 - l) * 4.5);
+      p.material.opacity = l * 0.55;
+      p.position.x += p.userData.vx * dt * (1.2 - l);
+      p.position.z += p.userData.vz * dt * (1.2 - l);
+    }
+  }
+
+  /* ---------- Pindah dunia ---------- */
+  var world = 'space';
+  function setWorld(w) {
+    world = w;
+    spaceWorld.visible = (w === 'space');
+    moonWorld.visible = (w === 'moon');
+    var host = (w === 'space') ? spaceWorld : moonWorld;
+    host.add(rocket);
+    host.add(astro);
+  }
+  setWorld('space');
+
+  /* ---------- Kamera ---------- */
+  var camPos = new THREE.Vector3(1.5, 2.8, 13), camLook = new THREE.Vector3(1.8, 3, 1);
+  var camTarget = camPos.clone(), lookTarget = camLook.clone();
+  var camRate = 2.6, shake = 0;
+  function aim(px, py, pz, lx, ly, lz) { camTarget.set(px, py, pz); lookTarget.set(lx, ly, lz); }
+  function snapCam() { camPos.copy(camTarget); camLook.copy(lookTarget); }
+  function orbitCam(angle, offY) {
+    var r = rocket.position;
+    aim(r.x + Math.cos(angle) * 22, r.y + offY, r.z + Math.sin(angle) * 22, r.x, r.y + 8, r.z);
+  }
+
+  /* ---------- Elemen antarmuka yang dipakai adegan ---------- */
+  var fadeEl = $('fade'), badgeHot = $('badgeHot'), badgeCold = $('badgeCold');
+  function fadeSet(on) { fadeEl.classList.toggle('on', on); }
+  function badges(hot, cold) { badgeHot.classList.toggle('show', hot); badgeCold.classList.toggle('show', cold); }
+
+  /* ---------- Jejak kaki ---------- */
+  var prints = [], printX = 0.4, printSide = 1;
+  var printGeo = new THREE.CircleGeometry(0.5, 16);
+  var printMat = new THREE.MeshBasicMaterial({ color: 0x4d4d55, transparent: true, opacity: 0.7, depthWrite: false });
+  function clearPrints() {
+    prints.forEach(function (m) { moonWorld.remove(m); });
+    prints = []; printX = 0.4; printSide = 1;
+  }
+  function ensurePrints(x) {
+    while (printX <= x) {
+      var m = new THREE.Mesh(printGeo, printMat);
+      m.rotation.x = -Math.PI / 2;
+      m.scale.set(0.42, 0.2, 1);
+      m.position.set(printX, 0.03, lerp(2.2, 1.6, printX / 3.8) + printSide * 0.18);
+      moonWorld.add(m);
+      prints.push(m);
+      printSide *= -1;
+      printX += 0.75;
+    }
+  }
+
+  /* ---------- Keadaan dasar ---------- */
+  function astroSet(x, y, z, ry) {
+    astro.position.set(x, y, z);
+    astro.rotation.set(0, ry, 0);
+    astro.scale.setScalar(1);
+    astro.visible = true;
+    A.walk = 0; A.hop = 0;
+  }
+  function resetPad() {
+    setWorld('space');
+    rocket.position.set(0, 0.4, 0);
+    rocket.rotation.set(0, 0, 0);
+    rocketFlame = 0;
+    astroSet(3.4, 0, 3.2, -0.3);
+    clearPrints(); fadeSet(false); badges(false, false);
+  }
+  function landedState() {
+    setWorld('moon');
+    rocket.position.set(-7, 0, -5);
+    rocket.rotation.set(0, 0.5, 0);
+    rocketFlame = 0;
+    fadeSet(false); badges(false, false);
+  }
+
+  var S3 = { y0: 1900, moon: false };
+
+  /* ---------- Daftar langkah cerita ---------- */
+  var steps = [
+    { label: 'Di Bumi', kicker: '', delay: 0.6, dur: 7,
+      text: 'Halo! Aku astronot kecilmu. Hari ini kita terbang ke Bulan, dan aku akan membagikan lima fakta unik yang belum banyak orang tahu. Ayo naik roket!',
+      enter: function (f) { resetPad(); A.mode = 'wave'; camRate = 2.6; aim(1.5, 2.8, 13, 1.8, 3, 1); if (f) snapCam(); },
+      update: function (t) { aim(1.5 + Math.sin(t * 0.5) * 0.7, 2.8, 13 - t * 0.15, 1.8, 3, 1); } },
+
+    { label: 'Peluncuran', kicker: '', delay: 0.3, dur: 9.5,
+      text: 'Tiga, dua, satu... meluncur!',
+      enter: function (f) { resetPad(); A.mode = 'idle'; camRate = 2.6; aim(1.5, 2.8, 12.5, 1.8, 3.2, 1); if (f) snapCam(); },
+      update: function (t) {
+        var rx = 0, ry = 0.4;
+        if (t < 2.6) {
+          var u = t / 2.6;
+          astro.position.set(lerp(3.4, 0.9, u), 0, lerp(3.2, 1.6, u));
+          astro.rotation.y = Math.atan2(0.9 - 3.4, 1.6 - 3.2);
+          A.walk = 1;
+        } else {
+          var e = smooth(2.6, 3.3, t), sc = 1 - e;
+          A.walk = 0;
+          astro.scale.setScalar(Math.max(0.001, sc));
+          astro.position.set(lerp(0.9, 0.2, e), e * 1.2, lerp(1.6, 0.3, e));
+          astro.visible = sc > 0.01;
+        }
+        var fl = smooth(3.2, 4.2, t);
+        rocketFlame = fl;
+        if (t > 3.2 && t < 4.7 && !reduce) rx = Math.sin(t * 60) * 0.05 * fl;
+        if (t >= 4.6) { var tt = t - 4.6; ry = 0.4 + 12 * tt * tt; }
+        rocket.position.set(rx, ry, 0);
+        camRate = lerp(2.6, 9, smooth(4.6, 7, t));
+        if (t < 4.6) aim(1.5, 2.8, 12.5, 1.8, 3.2, 1);
+        else aim(9, Math.max(2.8, ry - 2), 18, 0, ry + 4, 0);
+      } },
+
+    { label: 'Menuju Bulan', kicker: 'Fakta 1 dari 5', delay: 0.5, dur: 15,
+      text: 'Kamu tahu gak, kalau Bulan itu sedang menjauh dari Bumi? Setiap tahun jaraknya bertambah sekitar 3,8 sentimeter, kira-kira secepat tumbuhnya kuku jari kita.',
+      say: 'Kamu tahu gak, kalau Bulan itu sedang menjauh dari Bumi? Setiap tahun jaraknya bertambah sekitar tiga koma delapan sentimeter, kira-kira secepat tumbuhnya kuku jari kita.',
+      enter: function () { setWorld('space'); astro.visible = false; rocket.rotation.set(0, 0, 0); rocketFlame = 1; fadeSet(false); badges(false, false); camRate = 9; },
+      update: function (t) {
+        rocket.position.set(0, Math.min(232.7 + 119 * t, 2150), 0);
+        rocket.rotation.y = t * 0.5;
+        orbitCam(0.5 + t * 0.12, 6);
+      } },
+
+    { label: 'Pendaratan', kicker: '', delay: 4.6, dur: 13.5,
+      text: 'Kita mendarat! Di sini gravitasinya hanya sekitar seperenam Bumi, jadi lompatanmu bisa jauh lebih tinggi.',
+      enter: function (f) {
+        S3.y0 = f ? 1900 : rocket.position.y; S3.moon = false;
+        setWorld('space'); astro.visible = false; rocketFlame = 1; fadeSet(false); badges(false, false); camRate = 9;
+        if (f) { rocket.position.set(0, 1900, 0); rocket.rotation.set(0, 0, 0); }
+      },
+      update: function (t) {
+        if (t < 4.2) {
+          rocket.position.set(0, Math.min(S3.y0 + 55 * t, 2380), 0);
+          rocket.rotation.y += 0.01;
+          orbitCam(1.7 + t * 0.12, lerp(6, -8, smooth(0, 4, t)));
+          if (t > 3.5) fadeSet(true);
+          return;
+        }
+        if (!S3.moon) {
+          S3.moon = true;
+          setWorld('moon');
+          rocket.rotation.set(0, 0.5, 0);
+          astro.visible = false;
+          camRate = 3;
+          aim(1.2, 2.6, 11.5, -3, 10, -3); snapCam();
+          fadeSet(false);
+        }
+        var p = clamp((t - 4.2) / 3.6, 0, 1);
+        rocket.position.set(-7, 38 * (1 - p) * (1 - p), -5);
+        rocketFlame = p < 1 ? 0.8 * (1 - 0.3 * p) : 0;
+        if (t >= 8) {
+          var u1 = smooth(8, 9, t);
+          astro.visible = true;
+          astro.scale.setScalar(Math.max(0.001, u1));
+          var wu = clamp((t - 9) / 2.6, 0, 1);
+          astro.position.set(lerp(-4.9, 0, wu), 0, lerp(-3.2, 2.2, wu));
+          var walking = t > 9 && t < 11.6;
+          A.walk = walking ? 1 : 0;
+          astro.rotation.y = walking ? Math.atan2(4.9, 5.4) : lerp(astro.rotation.y, 0, 0.1);
+          A.hop = (t >= 11.8 && t < 13) ? 3 * Math.sin(Math.PI * (t - 11.8) / 1.2) : 0;
+        }
+        aim(1.2, 2.6, 11.5, -2, lerp(10, 2.2, p), -1.5);
+      } },
+
+    { label: 'Gempa Bulan', kicker: 'Fakta 2 dari 5', delay: 0.5, dur: 12,
+      text: 'Kamu tahu gak, Bulan juga punya gempa? Namanya gempa bulan. Getarannya bisa berlangsung sampai sekitar sepuluh menit, jauh lebih lama daripada gempa di Bumi.',
+      enter: function (f) { landedState(); clearPrints(); astroSet(0, 0, 2.2, 0); A.mode = 'idle'; camRate = 3; aim(0, 2.2, 9.5, 0, 1.5, 0); if (f) snapCam(); },
+      update: function (t) {
+        aim(Math.sin(t * 0.4) * 0.6, 2.2, 9.5 - t * 0.05, 0, 1.5, 0);
+        if (!reduce && t > 2.2 && t < 8.5) shake = 0.12 * Math.sin(Math.PI * (t - 2.2) / 6.3);
+      } },
+
+    { label: 'Jejak Kaki', kicker: 'Fakta 3 dari 5', delay: 0.5, dur: 12.5,
+      text: 'Kamu tahu gak, jejak kaki astronot di Bulan bisa bertahan sangat lama? Di sana tidak ada angin dan hujan, jadi jejak itu mungkin masih ada sampai jutaan tahun lagi.',
+      enter: function (f) { landedState(); clearPrints(); astroSet(0, 0, 2.2, 0); A.mode = 'idle'; camRate = 3; aim(0.5, 1.6, 8.5, 0, 0.6, 2); if (f) snapCam(); },
+      update: function (t) {
+        var u = clamp((t - 1) / 6.5, 0, 1), x = 3.8 * u;
+        astro.position.set(x, 0, lerp(2.2, 1.6, u));
+        A.walk = (u > 0 && u < 1) ? 1 : 0;
+        astro.rotation.y = t < 1 ? lerp(0, 1.5, smooth(0.3, 1, t)) : (t < 7.5 ? 1.5 : lerp(1.5, 0, smooth(7.5, 8.8, t)));
+        ensurePrints(x);
+        aim(x * 0.6 + 0.5, 1.5, 8.5, x * 0.8, 0.6, 1.6);
+      } },
+
+    { label: 'Sisi Jauh', kicker: 'Fakta 4 dari 5', delay: 0.5, dur: 13,
+      text: 'Kamu tahu gak, sisi jauh Bulan itu sebenarnya tidak selalu gelap? Sisi itu juga terkena sinar Matahari. Dari Bumi kita tidak pernah melihatnya karena Bulan selalu menghadapkan sisi yang sama ke kita.',
+      enter: function (f) { landedState(); ensurePrints(3.8); astroSet(3.8, 0, 1.6, 0); A.mode = 'point'; camRate = 2.4; aim(3.3, 2.3, 9, 3.8, 1.5, 1.6); if (f) snapCam(); },
+      update: function (t) {
+        var u = smooth(2.5, 5.5, t) - smooth(9.3, 12, t);
+        aim(lerp(3.3, -4, u), lerp(2.3, 6, u), lerp(9, 14, u), lerp(3.8, -26, u), lerp(1.5, 24, u), lerp(1.6, -76, u));
+      } },
+
+    { label: 'Suhu Ekstrem', kicker: 'Fakta 5 dari 5', delay: 0.5, dur: 13,
+      text: 'Kamu tahu gak, suhu di Bulan bisa berubah sangat ekstrem? Di siang hari bisa mencapai sekitar 127 derajat Celsius, dan di malam hari turun sampai sekitar minus 173 derajat Celsius.',
+      say: 'Kamu tahu gak, suhu di Bulan bisa berubah sangat ekstrem? Di siang hari bisa mencapai sekitar seratus dua puluh tujuh derajat Celsius, dan di malam hari turun sampai sekitar minus seratus tujuh puluh tiga derajat Celsius.',
+      enter: function (f) { landedState(); ensurePrints(3.8); astroSet(3.8, 0, 1.6, 0); A.mode = 'idle'; camRate = 2.6; aim(3.8, 2.3, 9.5, 3.8, 1.6, 1.6); if (f) snapCam(); },
+      update: function (t) {
+        aim(3.8 + Math.sin(t * 0.4) * 0.5, 2.3, 9.5, 3.8, 1.6, 1.6);
+        badges(t > 2.6, t > 7);
+      } },
+
+    { label: 'Penutup', kicker: 'Selesai', delay: 0.5, dur: 7.5,
+      text: 'Itu tadi lima fakta unik tentang Bulan. Sampai jumpa di perjalanan berikutnya!',
+      enter: function (f) { landedState(); ensurePrints(3.8); astroSet(3.8, 0, 1.6, 0); A.mode = 'wave'; camRate = 2.4; aim(3.8, 2.3, 9.5, 3.8, 1.6, 1.6); if (f) snapCam(); },
+      update: function (t) {
+        var u = smooth(0, 5, t);
+        aim(lerp(3.8, 0, u), lerp(2.3, 3.4, u), lerp(9.5, 17, u), lerp(3.8, -0.5, u), lerp(1.6, 2, u), 0);
+      } }
+  ];
+
+  /* ---------- Suara (TTS) ---------- */
+  var synth = window.speechSynthesis || null;
+  var voiceOn = true, idVoice = null, utId = 0, speaking = false, speechDone = true, guard = 0, watch = 0;
+  var startNote = $('startNote');
+
+  function pickVoice() {
+    if (!synth) return;
+    var list = synth.getVoices() || [];
+    idVoice = null;
+    for (var i = 0; i < list.length; i++) {
+      if (/^id/i.test(list[i].lang) || /indones/i.test(list[i].name)) { idVoice = list[i]; break; }
+    }
+    if (list.length && !idVoice) startNote.textContent = 'Perangkat ini belum punya suara bahasa Indonesia, jadi suara lain mungkin dipakai. Teks tetap tampil di layar.';
+  }
+  if (synth) {
+    pickVoice();
+    if (synth.addEventListener) synth.addEventListener('voiceschanged', pickVoice);
+  }
+
+  function cancelSpeech() {
+    utId++;
+    clearTimeout(guard); clearTimeout(watch);
+    speaking = false;
+    if (synth) { try { synth.cancel(); } catch (e) { /* diabaikan */ } }
+  }
+
+  var voiceStatus = $('voiceStatus');
+  function showVoiceError(code) {
+    voiceStatus.textContent = 'Suara tidak bisa diputar' + (code ? ' (' + code + ')' : '') + '. Cek volume dan mode senyap perangkat, atau coba buka di Chrome. Teks tetap tampil.';
+    voiceStatus.hidden = false;
+  }
+
+  function speak(text) {
+    var wasBusy = !!(synth && (synth.speaking || synth.pending));
+    cancelSpeech();
+    var id = utId, est = Math.max(1.8, text.length / 13), began = false;
+    speechDone = false;
+    function finish() {
+      if (id !== utId) return;
+      clearTimeout(guard); clearTimeout(watch);
+      speaking = false; speechDone = true;
+    }
+    function fallback() {
+      if (id !== utId) return;
+      clearTimeout(watch);
+      utId++;
+      var id2 = utId;
+      if (synth) { try { synth.cancel(); } catch (e) { /* diabaikan */ } }
+      speaking = true;
+      guard = setTimeout(function () { if (id2 === utId) { speaking = false; speechDone = true; } }, est * 1000);
+    }
+    if (!voiceOn || !synth || typeof SpeechSynthesisUtterance === 'undefined') {
+      speaking = true;
+      guard = setTimeout(finish, est * 1000);
+      return;
+    }
+    var u = new SpeechSynthesisUtterance(text);
+    if (idVoice) { u.voice = idVoice; u.lang = idVoice.lang; }
+    u.rate = 0.98; u.pitch = 1.05;
+    u.onstart = function () { if (id === utId) { began = true; speaking = true; clearTimeout(watch); voiceStatus.hidden = true; } };
+    u.onend = finish;
+    u.onerror = function (ev) {
+      if (id !== utId) return;
+      showVoiceError(ev && ev.error);
+      fallback();
+    };
+    function go() {
+      if (id !== utId) return;
+      try { synth.resume(); synth.speak(u); } catch (e) { showVoiceError(e && e.name); fallback(); }
+    }
+    if (wasBusy) setTimeout(go, 80); else go();
+    watch = setTimeout(function () { if (!began && id === utId) { showVoiceError('tidak mulai'); fallback(); } }, 3500);
+    guard = setTimeout(finish, est * 2400 + 4000);
+  }
+
+  /* ---------- Sutradara ---------- */
+  var capEl = $('caption'), capKick = $('capKicker'), capText = $('capText');
+  var pauseBtn = $('pauseBtn'), voiceBtn = $('voiceBtn'), progress = $('progress'), stepLabel = $('stepLabel');
+  var cur = -1, stepTime = 0, running = false, spoken = false, started = false, curSay = '', clock = 0;
+  var segs = [];
+  steps.forEach(function () { var i = document.createElement('i'); progress.appendChild(i); segs.push(i); });
+
+  function goStep(i, fresh) {
+    cancelSpeech();
+    cur = i; stepTime = 0; spoken = false; speechDone = false;
+    capEl.classList.remove('show');
+    steps[i].enter(!!fresh);
+    stepLabel.textContent = steps[i].label;
+    segs.forEach(function (s, j) { s.className = j < i ? 'done' : (j === i ? 'now' : ''); });
+  }
+  function finishAll() {
+    running = false;
+    segs.forEach(function (s) { s.className = 'done'; });
+    document.body.classList.add('ended');
+    pauseBtn.textContent = 'Jeda';
+  }
+  function next() {
+    if (cur >= steps.length - 1) { finishAll(); return; }
+    goStep(cur + 1, false);
+  }
+  function say(st) {
+    curSay = st.say || st.text;
+    capKick.textContent = st.kicker || '';
+    capKick.hidden = !st.kicker;
+    capText.textContent = st.text;
+    capEl.classList.add('show');
+    speak(curSay);
+  }
+
+  /* ---------- Tombol ---------- */
+  $('startBtn').addEventListener('click', function () {
+    if (started) return;
+    started = true;
+    document.body.classList.add('started');
+    pickVoice();
+    goStep(0, true);
+    running = true;
+    spoken = true;
+    say(steps[0]);
+  });
+  $('testBtn').addEventListener('click', function () {
+    pickVoice();
+    if (!synth || typeof SpeechSynthesisUtterance === 'undefined') {
+      startNote.textContent = 'Browser ini tidak mendukung suara (TTS), jadi narasi hanya tampil sebagai teks.';
+      return;
+    }
+    var n = (synth.getVoices() || []).length;
+    startNote.textContent = 'Menguji suara... ' + (idVoice ? 'Suara bahasa Indonesia ditemukan.' : (n ? 'Suara bahasa Indonesia tidak ditemukan, memakai suara lain.' : 'Belum ada suara yang terdeteksi.'));
+    speak('Halo, ini tes suara. Kalau kamu mendengar ini, suaranya berfungsi.');
+  });
+  pauseBtn.addEventListener('click', function () {
+    if (!started || document.body.classList.contains('ended')) return;
+    running = !running;
+    pauseBtn.textContent = running ? 'Jeda' : 'Lanjut';
+    if (!running) cancelSpeech();
+    else if (spoken && !speechDone) speak(curSay);
+    else if (spoken && speechDone) { /* kalimat sudah selesai */ }
+  });
+  $('skipBtn').addEventListener('click', function () {
+    if (!started) return;
+    if (!running && !document.body.classList.contains('ended')) { running = true; pauseBtn.textContent = 'Jeda'; }
+    next();
+  });
+  $('replayBtn').addEventListener('click', function () {
+    if (!started) return;
+    document.body.classList.remove('ended');
+    goStep(0, true);
+    running = true;
+    pauseBtn.textContent = 'Jeda';
+  });
+  voiceBtn.addEventListener('click', function () {
+    voiceOn = !voiceOn;
+    voiceBtn.textContent = voiceOn ? 'Suara: Nyala' : 'Suara: Mati';
+    voiceBtn.setAttribute('aria-pressed', voiceOn ? 'true' : 'false');
+    if (!voiceOn) cancelSpeech();
+    if (started && running && spoken && !speechDone) speak(curSay);
+    else if (!voiceOn && spoken && !speechDone) speechDone = true;
+  });
+
+  /* ---------- Ukuran layar ---------- */
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = (w / h < 0.85) ? 64 : 48;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* ---------- Putaran gambar ---------- */
+  var last = performance.now();
+  function frame(now) {
+    var dtReal = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    var dt = running ? dtReal : 0;
+    clock += dt;
+    if (running) stepTime += dt;
+    shake = 0;
+
+    var st = steps[cur];
+    if (st) {
+      if (running && !spoken && stepTime >= st.delay) { spoken = true; say(st); }
+      st.update(stepTime, dt);
+      if (running && stepTime >= st.dur && spoken && speechDone) next();
+    }
+
+    A.talking = speaking && running;
+    animAstro(clock, dt);
+
+    var fl = rocketFlame;
+    flame.visible = fl > 0.02;
+    flame.scale.set(fl, fl * (1 + Math.sin(clock * 45) * (reduce ? 0 : 0.12)), fl);
+
+    if (world === 'space') {
+      var alt = rocket.position.y;
+      setSky(clamp((alt - 20) / 600, 0, 1));
+      cap.visible = alt < 140;
+      launchSite.visible = alt < 400;
+      if (running && fl > 0.3 && alt < 120) {
+        puffAcc += dt * 18;
+        while (puffAcc >= 1) { puffAcc -= 1; emitPuff(rocket.position.x, rocket.position.y, rocket.position.z); }
+      }
+    } else {
+      setSky(1);
+    }
+    updatePuffs(dt);
+
+    var kk = 1 - Math.exp(-dtReal * camRate);
+    camPos.lerp(camTarget, kk);
+    camLook.lerp(lookTarget, kk);
+    camera.position.set(camPos.x + (Math.random() - 0.5) * shake, camPos.y + (Math.random() - 0.5) * shake, camPos.z);
+    camera.lookAt(camLook);
+    stars.position.copy(camera.position);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  goStep(0, true);
+  snapCam();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
